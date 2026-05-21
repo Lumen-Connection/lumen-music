@@ -6,6 +6,9 @@
 #include <QFont>
 #include <QRandomGenerator>
 #include <QList>
+#include <QPixmap>
+#include <QPainter>
+#include <QPainterPath>
 
 namespace Theme {
 
@@ -57,21 +60,31 @@ inline ThemeData grayTheme() {
         {"#ef5350"}, {"#0a0a0a"} };
 }
 
+// Lumen — deep black with the brand orange/coral of the diamond logo.
+// Minimalist and luminous, inspired by lumenconnection.com.br.
+inline ThemeData lumenTheme() {
+    return { "lumen", "Lumen",
+        {"#0a0a0c"}, {"#101013"}, {"#16161a"}, {"#1f1f25"},
+        {"#ee4914"}, {"#e0703c"},
+        {"#f5f5f7"}, {"#b4b4be"}, {"#71717a"}, {"#26262d"},
+        {"#e5484d"}, {"#050506"} };
+}
+
 inline ThemeData& activeTheme() {
-    static ThemeData t = warmTheme();
+    static ThemeData t = lumenTheme();
     return t;
 }
 
 inline void setActiveTheme(const ThemeData &t) { activeTheme() = t; }
 
 inline QList<ThemeData> allThemes() {
-    return { warmTheme(), oceanTheme(), forestTheme(), purpleTheme(), grayTheme() };
+    return { lumenTheme(), warmTheme(), oceanTheme(), forestTheme(), purpleTheme(), grayTheme() };
 }
 
 inline ThemeData themeById(const QString &id) {
     for (const auto &t : allThemes())
         if (t.id == id) return t;
-    return warmTheme();
+    return lumenTheme();
 }
 
 inline QColor bg()          { return activeTheme().bg; }
@@ -86,6 +99,12 @@ inline QColor textMuted()   { return activeTheme().textMuted; }
 inline QColor border()      { return activeTheme().border; }
 inline QColor danger()      { return activeTheme().danger; }
 inline QColor vinylBlack()  { return activeTheme().vinylBlack; }
+
+// Translucent accent for highlights (active rows, chips), so they track the theme.
+inline QString accentRgba(double alpha) {
+    QColor a = activeTheme().accent;
+    return QString("rgba(%1,%2,%3,%4)").arg(a.red()).arg(a.green()).arg(a.blue()).arg(alpha);
+}
 
 struct GradientPair {
     QColor c1, c2;
@@ -172,6 +191,27 @@ inline QString globalStyleSheet() {
         }
     )").arg(t.bg.name(), t.text.name(), t.border.name(),
             t.textMuted.name(), t.card.name());
+}
+
+// Center-cropped, rounded-corner cover image. Returns a null pixmap if the
+// file cannot be loaded so callers can fall back to gradient covers.
+inline QPixmap roundedCover(const QString &path, int w, int h, int radius) {
+    QPixmap src(path);
+    if (src.isNull()) return QPixmap();
+
+    QPixmap scaled = src.scaled(w, h, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    QPixmap result(w, h);
+    result.fill(Qt::transparent);
+
+    QPainter p(&result);
+    p.setRenderHint(QPainter::Antialiasing);
+    QPainterPath clip;
+    clip.addRoundedRect(0, 0, w, h, radius, radius);
+    p.setClipPath(clip);
+    int x = (scaled.width()  - w) / 2;
+    int y = (scaled.height() - h) / 2;
+    p.drawPixmap(-x, -y, scaled);
+    return result;
 }
 
 inline QString formatTime(qint64 ms) {

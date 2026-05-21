@@ -15,12 +15,24 @@ class PlayerBar : public QWidget {
 public:
     explicit PlayerBar(TrackModel *model, QWidget *parent = nullptr);
 
-    void playTrack(const Track &track);
+    // Plays a track within a given queue (playlist, liked list, library…).
+    // next/prev and auto-advance stay within that queue. An empty queue falls
+    // back to the full library.
+    void playTrack(const Track &track, const QList<Track> &queue = QList<Track>());
+    void playKeepingContext(const Track &track);  // play without resetting context/queue
     void togglePlay();
     void next();
     void prev();
     void setShuffle(bool on);
     void setRepeat(bool on);
+
+    // Spotify-style manual queue ("Próximas na fila").
+    void enqueue(const Track &track);
+    void removeFromQueue(int index);
+    bool takeFromQueue(int index, Track &out);   // removes and returns the item
+    QList<Track> userQueue() const { return m_userQueue; }
+    QList<Track> upcomingContext() const;        // context tracks after the current one
+    Track currentTrack() const { return m_currentTrack; }
 
     bool isPlaying() const;
     int  currentTrackId() const;
@@ -28,6 +40,8 @@ public:
 signals:
     void trackChanged(int trackId);
     void playingChanged(bool playing);
+    void queueChanged();
+    void queueRequested();   // user asked to open the queue view
 
 private slots:
     void onPositionChanged(qint64 pos);
@@ -35,6 +49,8 @@ private slots:
     void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
 
 private:
+    void loadAndPlay(const Track &track);
+    const QList<Track> &activeQueue() const;
     void updateControls();
     QString buttonStyle(bool active = false) const;
     QString sliderStyle(const QString &accentColor) const;
@@ -55,6 +71,7 @@ private:
     QPushButton *m_nextBtn;
     QPushButton *m_shuffleBtn;
     QPushButton *m_repeatBtn;
+    QPushButton *m_queueBtn;
 
     ClickableSlider *m_progressSlider;
     ClickableSlider *m_volumeSlider;
@@ -65,6 +82,9 @@ private:
     int  m_currentTrackId = 0;
     bool m_shuffle = false;
     bool m_repeat  = false;
+    QList<Track> m_queue;       // current playback context; empty = full library
+    QList<Track> m_userQueue;   // manually queued tracks, played before the context
+    Track        m_currentTrack;
 
     void updateVolIcon();
 };

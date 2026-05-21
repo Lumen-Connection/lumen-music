@@ -6,6 +6,7 @@
 #include <QLinearGradient>
 #include <QDateTime>
 #include <QFrame>
+#include "hoverplayfilter.h"
 
 HomePage::HomePage(TrackModel *model, QWidget *parent)
     : QWidget(parent), m_model(model)
@@ -123,10 +124,24 @@ void HomePage::refresh(int currentTrackId, bool isPlaying) {
         m_contentLayout->addSpacing(16);
     }
 
+    // ── Recently played (listening history) ─────────────────
+    auto played = m_model->recentlyPlayed(8);
+    if (!played.isEmpty()) {
+        auto *playedLabel = new QLabel("Tocadas recentemente");
+        playedLabel->setFont(Theme::titleFont(18));
+        playedLabel->setStyleSheet(QString("color: %1; background: transparent; padding-top: 8px;").arg(Theme::text().name()));
+        m_contentLayout->addWidget(playedLabel);
+
+        for (int i = 0; i < played.size(); ++i) {
+            m_contentLayout->addWidget(createTrackRow(played[i], i, currentTrackId, isPlaying));
+        }
+        m_contentLayout->addSpacing(16);
+    }
+
     // ── Recent tracks ───────────────────────────────────────
     auto recent = m_model->recentTracks(8);
     if (!recent.isEmpty()) {
-        auto *recentLabel = new QLabel("Recentes");
+        auto *recentLabel = new QLabel("Adicionadas recentemente");
         recentLabel->setFont(Theme::titleFont(18));
         recentLabel->setStyleSheet(QString("color: %1; background: transparent; padding-top: 8px;").arg(Theme::text().name()));
         m_contentLayout->addWidget(recentLabel);
@@ -159,7 +174,7 @@ QWidget *HomePage::createTrackRow(const Track &track, int index, int currentId, 
     row->setStyleSheet(QString(
         "QWidget#trackRow { background: %1; border-radius: 8px; border-left: 3px solid %2; }"
     ).arg(
-        active ? "rgba(232,164,74,0.12)" : "transparent",
+        active ? Theme::accentRgba(0.12) : QStringLiteral("transparent"),
         active ? Theme::accent().name() : "transparent"
     ));
 
@@ -167,18 +182,21 @@ QWidget *HomePage::createTrackRow(const Track &track, int index, int currentId, 
     layout->setContentsMargins(12, 4, 12, 4);
     layout->setSpacing(12);
 
-    // Index
-    auto *idx = new QLabel(QString("%1").arg(index + 1, 2, 10, QChar('0')));
+    // Index — shows a play glyph on hover (and on the active row)
+    QString idxNum = QString("%1").arg(index + 1, 2, 10, QChar('0'));
+    auto *idx = new QLabel(active ? QStringLiteral("\uE102") : idxNum);
     idx->setFont(Theme::monoFont(12));
     idx->setFixedWidth(28);
     idx->setAlignment(Qt::AlignCenter);
-    idx->setStyleSheet(QString("color: %1; background: transparent;").arg(
+    idx->setStyleSheet(QString("color: %1; background: transparent; font-family: \"Segoe MDL2 Assets\", Consolas;").arg(
         active ? Theme::accent().name() : Theme::textMuted().name()));
+    idx->setAttribute(Qt::WA_TransparentForMouseEvents);  // let clicks reach the play overlay
     layout->addWidget(idx);
 
     // Cover swatch
     auto *swatch = new QWidget();
     swatch->setFixedSize(38, 38);
+    swatch->setAttribute(Qt::WA_TransparentForMouseEvents);
     swatch->setStyleSheet(QString("background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 %1, stop:1 %2); border-radius: 6px;")
         .arg(track.cover.c1.name(), track.cover.c2.name()));
     layout->addWidget(swatch);
@@ -188,24 +206,44 @@ QWidget *HomePage::createTrackRow(const Track &track, int index, int currentId, 
     infoLayout->setSpacing(1);
     auto *title = new QLabel(track.title);
     title->setFont(Theme::bodyFont(13));
+    title->setAttribute(Qt::WA_TransparentForMouseEvents);
     title->setStyleSheet(QString("color: %1; background: transparent; font-weight: 600;").arg(
         active ? Theme::accent().name() : Theme::text().name()));
     auto *artist = new QLabel(track.artist);
     artist->setFont(Theme::bodyFont(11));
+    artist->setAttribute(Qt::WA_TransparentForMouseEvents);
     artist->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::textSoft().name()));
     infoLayout->addWidget(title);
     infoLayout->addWidget(artist);
     layout->addLayout(infoLayout, 1);
 
-    // Folder tag
+    // Folder tag — clickable, navigates to the playlist
     if (!track.folder.isEmpty()) {
-        auto *tag = new QLabel(track.folder);
+        auto *tag = new QPushButton(track.folder);
         tag->setFont(Theme::bodyFont(10));
+        tag->setCursor(Qt::PointingHandCursor);
+        tag->setToolTip(QString("Ir para a playlist \"%1\"").arg(track.folder));
         tag->setStyleSheet(QString(
-            "color: %1; background: rgba(232,164,74,0.1); border-radius: 10px; padding: 2px 8px;"
-        ).arg(Theme::accentDim().name()));
+            "QPushButton { color: %1; background: " + Theme::accentRgba(0.10) + "; border: none; border-radius: 10px; padding: 2px 8px; }"
+            "QPushButton:hover { background: " + Theme::accentRgba(0.28) + "; color: %2; }"
+        ).arg(Theme::accentDim().name(), Theme::text().name()));
+        QString folderName = track.folder;
+        connect(tag, &QPushButton::clicked, [this, folderName]() { emit navigateTo("folder", folderName); });
         layout->addWidget(tag);
     }
+
+    // Add to queue button
+    auto *queueBtn = new QPushButton(QStringLiteral("\uE710"));
+    queueBtn->setFixedSize(28, 28);
+    queueBtn->setCursor(Qt::PointingHandCursor);
+    queueBtn->setToolTip("Adicionar \u00E0 fila");
+    queueBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: none; font-size: 13px; font-family: \"Segoe MDL2 Assets\"; }"
+        "QPushButton:hover { color: %2; }"
+    ).arg(Theme::textMuted().name(), Theme::accent().name()));
+    Track qt = track;
+    connect(queueBtn, &QPushButton::clicked, [this, qt]() { emit enqueueRequested(qt); });
+    layout->addWidget(queueBtn);
 
     // Like button
     auto *likeBtn = new QPushButton(track.liked ? "\uE00B" : "\uE006");
@@ -218,6 +256,34 @@ QWidget *HomePage::createTrackRow(const Track &track, int index, int currentId, 
     int likeId = track.id;
     connect(likeBtn, &QPushButton::clicked, [this, likeId]() { emit likeToggled(likeId); });
     layout->addWidget(likeBtn);
+
+    // Edit info button
+    auto *editBtn = new QPushButton(QStringLiteral("\uE70F"));
+    editBtn->setFixedSize(28, 28);
+    editBtn->setCursor(Qt::PointingHandCursor);
+    editBtn->setFont(Theme::iconFont(11));
+    editBtn->setToolTip("Editar música");
+    editBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: none; font-family: \"Segoe MDL2 Assets\"; }"
+        "QPushButton:hover { color: %2; }"
+    ).arg(Theme::textMuted().name(), Theme::accent().name()));
+    Track et = track;
+    connect(editBtn, &QPushButton::clicked, [this, et]() { emit editTrackRequested(et); });
+    layout->addWidget(editBtn);
+
+    // Delete button
+    auto *delBtn = new QPushButton(QStringLiteral("\uE107"));
+    delBtn->setFixedSize(28, 28);
+    delBtn->setCursor(Qt::PointingHandCursor);
+    delBtn->setFont(Theme::iconFont(11));
+    delBtn->setToolTip("Excluir música");
+    delBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: none; font-family: \"Segoe MDL2 Assets\"; }"
+        "QPushButton:hover { color: %2; }"
+    ).arg(Theme::textMuted().name(), Theme::danger().name()));
+    int delId = track.id;
+    connect(delBtn, &QPushButton::clicked, [this, delId]() { emit deleteRequested(delId); });
+    layout->addWidget(delBtn);
 
     // Duration
     auto *dur = new QLabel(Theme::formatTime(track.durationMs));
@@ -235,6 +301,8 @@ QWidget *HomePage::createTrackRow(const Track &track, int index, int currentId, 
     overlay->setCursor(Qt::PointingHandCursor);
     overlay->lower();
     connect(overlay, &QPushButton::clicked, [this, t]() { emit playRequested(t); });
+    // Hover over the row's main area swaps the index number for a play glyph.
+    if (!active) overlay->installEventFilter(new HoverPlayFilter(idx, idxNum, overlay));
 
     return row;
 }

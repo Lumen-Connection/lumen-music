@@ -6,11 +6,15 @@
 #include <QDialog>
 #include <QGridLayout>
 #include <QSettings>
+#include <QResizeEvent>
+#include <QLineEdit>
+#include <QMessageBox>
+#include "lumenlogo.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("Vinil Player");
+    setWindowTitle("Lumen Player");
     resize(1100, 720);
     setMinimumSize(900, 550);
 
@@ -66,6 +70,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_playerBar = new PlayerBar(m_model, this);
     mainLayout->addWidget(m_playerBar);
 
+    // Queue page needs the player bar to read the live queue.
+    m_queuePage = new QueuePage(m_model, m_playerBar, this);
+    m_stack->addWidget(m_queuePage);   // 5
+
     // ── Connections ─────────────────────────────────────────
     // Home page
     connect(m_homePage, &HomePage::playRequested, this, &MainWindow::onTrackPlay);
@@ -74,6 +82,16 @@ MainWindow::MainWindow(QWidget *parent)
         refreshCurrentPage();
     });
     connect(m_homePage, &HomePage::navigateTo, this, &MainWindow::navigateTo);
+    connect(m_homePage, &HomePage::enqueueRequested, this, [this](const Track &t) {
+        m_playerBar->enqueue(t);
+        showToast("Adicionado à fila");
+    });
+    connect(m_homePage, &HomePage::editTrackRequested, this, [this](const Track &t) {
+        showEditTrackDialog(t);
+    });
+    connect(m_homePage, &HomePage::deleteRequested, this, [this](int id) {
+        if (Track *t = m_model->findTrack(id)) confirmDeleteTrack(*t);
+    });
 
     // Add page
     connect(m_addPage, &AddMusicPage::trackAdded, this, [this](const Track &) {
@@ -94,11 +112,16 @@ MainWindow::MainWindow(QWidget *parent)
         refreshCurrentPage();
     });
     connect(m_folderDetailPage, &FolderDetailPage::deleteRequested, this, [this](int id) {
-        m_model->removeTrack(id);
-        refreshCurrentPage();
-        refreshSidebarFolders();
+        if (Track *t = m_model->findTrack(id)) confirmDeleteTrack(*t);
+    });
+    connect(m_folderDetailPage, &FolderDetailPage::editTrackRequested, this, [this](const Track &t) {
+        showEditTrackDialog(t);
     });
     connect(m_folderDetailPage, &FolderDetailPage::navigateBack, this, [this]() { navigateTo("folders"); });
+    connect(m_folderDetailPage, &FolderDetailPage::enqueueRequested, this, [this](const Track &t) {
+        m_playerBar->enqueue(t);
+        showToast("Adicionado à fila");
+    });
 
     // Liked page
     connect(m_likedPage, &LikedPage::playRequested, this, &MainWindow::onTrackPlay);
@@ -107,17 +130,56 @@ MainWindow::MainWindow(QWidget *parent)
         refreshCurrentPage();
     });
     connect(m_likedPage, &LikedPage::navigateBack, this, [this]() { navigateTo("home"); });
+    connect(m_likedPage, &LikedPage::navigateToFolder, this, [this](const QString &name) {
+        navigateTo("folder", name);
+    });
+    connect(m_likedPage, &LikedPage::enqueueRequested, this, [this](const Track &t) {
+        m_playerBar->enqueue(t);
+        showToast("Adicionado à fila");
+    });
+    connect(m_likedPage, &LikedPage::editTrackRequested, this, [this](const Track &t) {
+        showEditTrackDialog(t);
+    });
+    connect(m_likedPage, &LikedPage::deleteRequested, this, [this](int id) {
+        if (Track *t = m_model->findTrack(id)) confirmDeleteTrack(*t);
+    });
+
+    // Queue page
+    connect(m_queuePage, &QueuePage::playContext, this, [this](const Track &t) {
+        m_playerBar->playKeepingContext(t);
+        refreshCurrentPage();
+    });
+    connect(m_queuePage, &QueuePage::playFromQueue, this, [this](int index) {
+        Track t;
+        if (m_playerBar->takeFromQueue(index, t)) {
+            m_playerBar->playKeepingContext(t);
+        }
+        refreshCurrentPage();
+    });
+    connect(m_queuePage, &QueuePage::removeFromQueueRequested, this, [this](int index) {
+        m_playerBar->removeFromQueue(index);
+    });
+    connect(m_queuePage, &QueuePage::likeToggled, this, [this](int id) {
+        m_model->toggleLike(id);
+        refreshCurrentPage();
+    });
+    connect(m_queuePage, &QueuePage::navigateBack, this, [this]() { navigateTo("home"); });
 
     // Player bar
     connect(m_playerBar, &PlayerBar::trackChanged, this, [this](int) {
         refreshCurrentPage();
     });
+    connect(m_playerBar, &PlayerBar::queueRequested, this, [this]() { navigateTo("queue"); });
+    connect(m_playerBar, &PlayerBar::queueChanged, this, [this]() { refreshCurrentPage(); });
 
-    // Model changes
+    // Model changes — keep the count label, the visible page, and the sidebar
+    // in sync so edits (cover image/colors, rename, etc.) reflect immediately.
     connect(m_model, &TrackModel::tracksChanged, this, [this]() {
         m_trackCountLabel->setText(QString("%1 faixa%2 na biblioteca")
             .arg(m_model->tracks().size())
             .arg(m_model->tracks().size() != 1 ? "s" : ""));
+        refreshCurrentPage();
+        refreshSidebarFolders();
     });
 
     // Initial state
@@ -136,21 +198,20 @@ void MainWindow::buildSidebar(QWidget *sidebar) {
     logoLayout->setContentsMargins(20, 20, 20, 16);
     logoLayout->setSpacing(8);
 
-    auto *logoIcon = new QLabel("\uE8D6");
-    logoIcon->setFont(Theme::iconFont(16));
-    logoIcon->setStyleSheet(QString("color: %1; background: %2; border-radius: 8px; padding: 4px 8px;")
-        .arg(Theme::bg().name(), Theme::accent().name()));
+    auto *logoIcon = new LumenLogo();
+    logoIcon->setFixedSize(30, 30);
     logoLayout->addWidget(logoIcon);
 
-    auto *logoText = new QLabel("Vinil");
+    auto *logoText = new QLabel("Lumen");
     logoText->setFont(Theme::titleFont(18));
     logoText->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::text().name()));
     logoLayout->addWidget(logoText);
 
     auto *badge = new QLabel("PLAYER");
     badge->setFont(Theme::bodyFont(9));
-    badge->setStyleSheet(QString("color: %1; background: rgba(232,164,74,0.15); border-radius: 4px; padding: 2px 6px; font-weight: bold;")
-        .arg(Theme::accent().name()));
+    QColor ac = Theme::accent();
+    badge->setStyleSheet(QString("color: %1; background: rgba(%2,%3,%4,0.16); border-radius: 4px; padding: 2px 6px; font-weight: bold; letter-spacing: 1px;")
+        .arg(Theme::accent().name()).arg(ac.red()).arg(ac.green()).arg(ac.blue()));
     logoLayout->addWidget(badge);
     logoLayout->addStretch();
 
@@ -282,7 +343,7 @@ void MainWindow::refreshSidebarFolders() {
             btn->setStyleSheet(QString(
                 "QPushButton { background: %1; border: none; border-radius: 8px; }"
                 "QPushButton:hover { background: rgba(255,255,255,0.05); }"
-            ).arg(isActive ? "rgba(232,164,74,0.12)" : "transparent"));
+            ).arg(isActive ? Theme::accentRgba(0.12) : QStringLiteral("transparent")));
 
             QString folderName = f.name;
             connect(btn, &QPushButton::clicked, [this, folderName]() { navigateTo("folder", folderName); });
@@ -294,6 +355,125 @@ void MainWindow::refreshSidebarFolders() {
     m_sidebarFoldersLayout->addStretch();
 }
 
+void MainWindow::showEditTrackDialog(const Track &track) {
+    int id = track.id;
+    auto *dlg = new QDialog(this);
+    dlg->setWindowTitle("Editar Música");
+    dlg->setFixedSize(380, 200);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setStyleSheet(QString(
+        "QDialog { background: %1; }"
+        "QLabel { background: transparent; color: %2; }"
+        "QLineEdit { background: %3; color: %2; border: 1px solid %4; border-radius: 8px; padding: 8px 12px; }"
+        "QLineEdit:focus { border-color: %5; }"
+    ).arg(Theme::surface().name(), Theme::text().name(), Theme::bg().name(),
+          Theme::border().name(), Theme::accent().name()));
+
+    auto *layout = new QVBoxLayout(dlg);
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(10);
+
+    auto *titleLabel = new QLabel("Nome da música");
+    titleLabel->setFont(Theme::bodyFont(12));
+    layout->addWidget(titleLabel);
+    auto *titleEdit = new QLineEdit(track.title);
+    titleEdit->setFont(Theme::bodyFont(13));
+    layout->addWidget(titleEdit);
+
+    auto *artistLabel = new QLabel("Artista");
+    artistLabel->setFont(Theme::bodyFont(12));
+    layout->addWidget(artistLabel);
+    auto *artistEdit = new QLineEdit(track.artist);
+    artistEdit->setFont(Theme::bodyFont(13));
+    layout->addWidget(artistEdit);
+
+    auto *btnRow = new QHBoxLayout();
+    btnRow->addStretch();
+    auto *cancelBtn = new QPushButton("Cancelar");
+    cancelBtn->setFont(Theme::bodyFont(12));
+    cancelBtn->setFixedHeight(36);
+    cancelBtn->setCursor(Qt::PointingHandCursor);
+    cancelBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: 1px solid %2; border-radius: 18px; padding: 0 16px; }"
+        "QPushButton:hover { background: rgba(255,255,255,0.05); }"
+    ).arg(Theme::textSoft().name(), Theme::border().name()));
+    connect(cancelBtn, &QPushButton::clicked, dlg, &QDialog::reject);
+    btnRow->addWidget(cancelBtn);
+
+    auto *saveBtn = new QPushButton("Salvar");
+    saveBtn->setFont(Theme::bodyFont(12));
+    saveBtn->setFixedHeight(36);
+    saveBtn->setCursor(Qt::PointingHandCursor);
+    saveBtn->setStyleSheet(QString(
+        "QPushButton { background: %1; color: %2; border: none; border-radius: 18px; padding: 0 20px; font-weight: bold; }"
+        "QPushButton:hover { background: %3; }"
+    ).arg(Theme::accent().name(), Theme::bg().name(), Theme::accent().lighter(110).name()));
+    connect(saveBtn, &QPushButton::clicked, [this, dlg, titleEdit, artistEdit, id]() {
+        QString title = titleEdit->text().trimmed();
+        if (title.isEmpty()) return;
+        m_model->updateTrack(id, title, artistEdit->text().trimmed());
+        dlg->accept();
+    });
+    btnRow->addWidget(saveBtn);
+    layout->addLayout(btnRow);
+
+    connect(artistEdit, &QLineEdit::returnPressed, saveBtn, &QPushButton::click);
+    dlg->exec();
+}
+
+void MainWindow::confirmDeleteTrack(const Track &track) {
+    auto *dlg = new QMessageBox(this);
+    dlg->setWindowTitle("Excluir Música");
+    dlg->setText(QString("Excluir \"%1\"?").arg(track.title));
+    dlg->setInformativeText("A música será removida da biblioteca.");
+    dlg->setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+    dlg->setDefaultButton(QMessageBox::Cancel);
+    dlg->setStyleSheet(QString(
+        "QMessageBox { background: %1; color: %2; } QLabel { color: %2; background: transparent; }"
+        "QPushButton { background: %3; color: %2; border: 1px solid %4; border-radius: 8px; padding: 6px 16px; min-width: 70px; }"
+        "QPushButton:hover { background: %5; }"
+    ).arg(Theme::surface().name(), Theme::text().name(), Theme::card().name(),
+          Theme::border().name(), Theme::cardHover().name()));
+    if (dlg->exec() == QMessageBox::Yes) {
+        m_model->removeTrack(track.id);
+        refreshSidebarFolders();
+    }
+}
+
+void MainWindow::showToast(const QString &text) {
+    if (!m_toast) {
+        m_toast = new QLabel(this);
+        m_toast->setAlignment(Qt::AlignCenter);
+        m_toast->setAttribute(Qt::WA_TransparentForMouseEvents);
+        m_toastTimer = new QTimer(this);
+        m_toastTimer->setSingleShot(true);
+        connect(m_toastTimer, &QTimer::timeout, this, [this]() { if (m_toast) m_toast->hide(); });
+    }
+    // Light pill with dark text, like Spotify's "Added to queue".
+    m_toast->setFont(Theme::bodyFont(12));
+    m_toast->setStyleSheet(QString(
+        "background: %1; color: %2; border-radius: 8px; padding: 10px 18px; font-weight: 600;")
+        .arg(Theme::text().name(), Theme::bg().name()));
+    m_toast->setText(text);
+    m_toast->adjustSize();
+    repositionToast();
+    m_toast->show();
+    m_toast->raise();
+    m_toastTimer->start(1800);
+}
+
+void MainWindow::repositionToast() {
+    if (!m_toast) return;
+    int x = (width() - m_toast->width()) / 2;
+    int y = height() - m_playerBar->height() - m_toast->height() - 24;
+    m_toast->move(x, y);
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event) {
+    QMainWindow::resizeEvent(event);
+    if (m_toast && m_toast->isVisible()) repositionToast();
+}
+
 void MainWindow::navigateTo(const QString &page, const QString &data) {
     m_currentPage = page;
 
@@ -301,7 +481,7 @@ void MainWindow::navigateTo(const QString &page, const QString &data) {
     auto activeStyle = [](bool active) {
         if (active) {
             return QString(
-                "QPushButton { background: rgba(232,164,74,0.15); color: %1; border: none; border-radius: 10px; text-align: left; padding-left: 14px; font-weight: bold; }"
+                "QPushButton { background: " + Theme::accentRgba(0.15) + "; color: %1; border: none; border-radius: 10px; text-align: left; padding-left: 14px; font-weight: bold; }"
             ).arg(Theme::accent().name());
         }
         return QString(
@@ -327,6 +507,8 @@ void MainWindow::navigateTo(const QString &page, const QString &data) {
         m_stack->setCurrentIndex(3);
     } else if (page == "liked") {
         m_stack->setCurrentIndex(4);
+    } else if (page == "queue") {
+        m_stack->setCurrentIndex(5);
     }
 
     refreshCurrentPage();
@@ -345,11 +527,25 @@ void MainWindow::refreshCurrentPage() {
         m_folderDetailPage->refresh(curId, playing);
     } else if (m_stack->currentIndex() == 4) {
         m_likedPage->refresh(curId, playing);
+    } else if (m_stack->currentIndex() == 5) {
+        m_queuePage->refresh(curId, playing);
     }
 }
 
 void MainWindow::onTrackPlay(const Track &track) {
-    m_playerBar->playTrack(track);
+    // Build the playback queue from the context the track was launched in, so
+    // each playlist plays within itself instead of the whole library.
+    QList<Track> queue;
+    if (m_currentPage == "folder") {
+        QString fname = m_folderDetailPage->property("folderName").toString();
+        queue = fname.isEmpty() ? m_model->standaloneTracks()
+                                : m_model->tracksInFolder(fname);
+    } else if (m_currentPage == "liked") {
+        queue = m_model->likedTracks();
+    } else {
+        queue = m_model->tracks();   // home / full library
+    }
+    m_playerBar->playTrack(track, queue);
     refreshCurrentPage();
 }
 

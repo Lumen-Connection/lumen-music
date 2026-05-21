@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QLabel>
+#include <QTimer>
 #include "trackmodel.h"
 #include "playerbar.h"
 #include "homepage.h"
@@ -13,6 +14,7 @@
 #include "folderspage.h"
 #include "folderdetailpage.h"
 #include "likedpage.h"
+#include "queuepage.h"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -21,6 +23,9 @@ public:
 
 signals:
     void themeChangeRequested();
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
     void navigateTo(const QString &page, const QString &data = "");
@@ -31,6 +36,10 @@ private slots:
 private:
     void buildSidebar(QWidget *sidebar);
     void refreshSidebarFolders();
+    void showToast(const QString &text);
+    void repositionToast();
+    void showEditTrackDialog(const Track &track);
+    void confirmDeleteTrack(const Track &track);
 
     TrackModel *m_model;
     PlayerBar *m_playerBar;
@@ -41,6 +50,7 @@ private:
     FoldersPage *m_foldersPage;
     FolderDetailPage *m_folderDetailPage;
     LikedPage *m_likedPage;
+    QueuePage *m_queuePage;
 
     // Sidebar
     QPushButton *m_navHome;
@@ -51,6 +61,9 @@ private:
     QLabel *m_trackCountLabel;
 
     QString m_currentPage;
+
+    QLabel *m_toast = nullptr;
+    QTimer *m_toastTimer = nullptr;
 };
 
 #endif // MAINWINDOW_H

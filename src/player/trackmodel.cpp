@@ -34,6 +34,19 @@ void TrackModel::removeTrack(int id) {
     emit tracksChanged();
 }
 
+void TrackModel::updateTrack(int id, const QString &title, const QString &artist) {
+    QString finalArtist = artist.isEmpty() ? QStringLiteral("Desconhecido") : artist;
+    Database::instance().updateTrack(id, title, finalArtist);
+    for (auto &t : m_tracks) {
+        if (t.id == id) {
+            t.title  = title;
+            t.artist = finalArtist;
+            break;
+        }
+    }
+    emit tracksChanged();
+}
+
 void TrackModel::toggleLike(int id) {
     for (auto &t : m_tracks) {
         if (t.id == id) {
@@ -43,6 +56,19 @@ void TrackModel::toggleLike(int id) {
             return;
         }
     }
+}
+
+void TrackModel::markPlayed(int id) {
+    Database::instance().markPlayed(id);
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (auto &t : m_tracks) {
+        if (t.id == id) {
+            t.lastPlayedAt = now;
+            t.playCount++;
+            break;
+        }
+    }
+    emit tracksChanged();
 }
 
 void TrackModel::setDuration(int id, qint64 ms) {
@@ -71,6 +97,9 @@ QList<Track> TrackModel::tracksInFolder(const QString &folderName) const {
     for (auto &t : m_tracks) {
         if (t.folder == folderName) result.append(t);
     }
+    // Honour the playlist's custom order.
+    std::sort(result.begin(), result.end(),
+        [](const Track &a, const Track &b) { return a.position < b.position; });
     return result;
 }
 
@@ -97,8 +126,19 @@ QList<Track> TrackModel::recentTracks(int count) const {
     return sorted.mid(0, count);
 }
 
-int TrackModel::createPlaylist(const QString &name, const QColor &c1, const QColor &c2) {
-    int id = Database::instance().createFolder(name, c1, c2);
+QList<Track> TrackModel::recentlyPlayed(int count) const {
+    QList<Track> played;
+    for (const auto &t : m_tracks)
+        if (t.lastPlayedAt > 0) played.append(t);
+    std::sort(played.begin(), played.end(),
+        [](const Track &a, const Track &b) { return a.lastPlayedAt > b.lastPlayedAt; });
+    return played.mid(0, count);
+}
+
+int TrackModel::createPlaylist(const QString &name, const QColor &c1, const QColor &c2,
+                               const QString &coverImage) {
+    QString stored = Database::importCoverImage(coverImage);
+    int id = Database::instance().createFolder(name, c1, c2, stored);
     emit tracksChanged();
     return id;
 }
@@ -113,6 +153,13 @@ void TrackModel::renamePlaylist(int id, const QString &newName) {
 
 void TrackModel::updatePlaylistCover(int id, const QColor &c1, const QColor &c2) {
     Database::instance().updateFolderCover(id, c1, c2);
+    emit tracksChanged();
+}
+
+void TrackModel::updatePlaylistCoverImage(int id, const QString &sourcePath) {
+    // Empty path clears the image and reverts to the gradient cover.
+    QString stored = Database::importCoverImage(sourcePath);
+    Database::instance().updateFolderCoverImage(id, stored);
     emit tracksChanged();
 }
 
@@ -134,6 +181,16 @@ void TrackModel::moveTrackToPlaylist(int trackId, int playlistId, const QString 
             t.folderId = playlistId;
             t.folder   = playlistName;
         }
+    }
+    emit tracksChanged();
+}
+
+void TrackModel::reorderPlaylist(const QString &folderName, const QList<int> &orderedTrackIds) {
+    Q_UNUSED(folderName);
+    for (int i = 0; i < orderedTrackIds.size(); ++i) {
+        Database::instance().setTrackPosition(orderedTrackIds[i], i);
+        for (auto &t : m_tracks)
+            if (t.id == orderedTrackIds[i]) { t.position = i; break; }
     }
     emit tracksChanged();
 }

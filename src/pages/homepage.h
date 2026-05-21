@@ -15,6 +15,9 @@ public:
 signals:
     void playRequested(const Track &track);
     void likeToggled(int id);
+    void enqueueRequested(const Track &track);
+    void editTrackRequested(const Track &track);
+    void deleteRequested(int id);
     void navigateTo(const QString &page, const QString &data = "");
 
 private:

@@ -20,6 +20,8 @@ struct Track {
     Theme::GradientPair cover;
     bool    liked     = false;
     qint64  addedAt   = 0;
+    qint64  lastPlayedAt = 0;
+    qint64  position  = 0;   // order within its playlist
     QUrl    audioUrl;
 
     static Track create(const QString &title, const QString &artist,
@@ -39,6 +41,7 @@ struct Folder {
     int     id = 0;
     QString name;
     Theme::GradientPair cover;
+    QString coverImage;   // absolute path to a cover image; empty = use gradient
 };
 
 class TrackModel : public QObject {
@@ -51,8 +54,10 @@ public:
 
     void addTrack(const Track &track);
     void removeTrack(int id);
+    void updateTrack(int id, const QString &title, const QString &artist);
     void toggleLike(int id);
     void setDuration(int id, qint64 ms);
+    void markPlayed(int id);
 
     Track *findTrack(int id);
     QList<Folder> folders() const;
@@ -60,13 +65,17 @@ public:
     QList<Track> standaloneTracks() const;
     QList<Track> likedTracks() const;
     QList<Track> recentTracks(int count = 8) const;
+    QList<Track> recentlyPlayed(int count = 8) const;
 
     // Playlist CRUD
-    int  createPlaylist(const QString &name, const QColor &c1, const QColor &c2);
+    int  createPlaylist(const QString &name, const QColor &c1, const QColor &c2,
+                        const QString &coverImage = QString());
     void renamePlaylist(int id, const QString &newName);
     void updatePlaylistCover(int id, const QColor &c1, const QColor &c2);
+    void updatePlaylistCoverImage(int id, const QString &sourcePath);
     void deletePlaylist(int id);
     void moveTrackToPlaylist(int trackId, int playlistId, const QString &playlistName);
+    void reorderPlaylist(const QString &folderName, const QList<int> &orderedTrackIds);
 
     int nextIndex(int currentIndex, bool shuffle) const;
     int prevIndex(int currentIndex) const;

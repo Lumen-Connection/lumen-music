@@ -21,6 +21,7 @@ SOURCES += \
     src/pages/folderspage.cpp \
     src/pages/folderdetailpage.cpp \
     src/pages/likedpage.cpp \
+    src/pages/queuepage.cpp \
     src/player/playerbar.cpp \
     src/player/trackmodel.cpp \
     src/widgets/vinylwidget.cpp \
@@ -34,11 +35,15 @@ HEADERS += \
     src/pages/folderspage.h \
     src/pages/folderdetailpage.h \
     src/pages/likedpage.h \
+    src/pages/queuepage.h \
     src/player/playerbar.h \
     src/player/trackmodel.h \
     src/widgets/vinylwidget.h \
     src/widgets/clickableslider.h \
-    src/widgets/theme.h
+    src/widgets/theme.h \
+    src/widgets/hoverplayfilter.h \
+    src/widgets/reorderablelist.h \
+    src/widgets/lumenlogo.h
 
 RESOURCES += \
     resources/resources.qrc

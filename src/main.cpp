@@ -2,16 +2,7 @@
 #include <QSettings>
 #include "mainwindow.h"
 #include "theme.h"
-
-//acrescentar um aviso em caso esteja repetindo a música ao adicionar
-//corrigir replay da musica
-//corrigir reload da musica
-//ao clicar a pasta que fica entre musica e coração de like, deverá direcionar a pasta determinada
-//acrescentar o play em coleção curtidas
-//separar play em cada playlist e não ter play somente em "Recentes"
-//considerar as musicas curtidas como playlist propria
-//acrescentar a fila das ultimas musicas escutadas
-//reload dinâmica de saudação: "bom dia", "boa tarde" e "boa noite" em cada horário determinada
+#include "lumenlogo.h"
 
 static const int RESTART_CODE = 1000;
 
@@ -20,11 +11,15 @@ int main(int argc, char *argv[])
     int exitCode;
     do {
         QApplication app(argc, argv);
+        // Storage identifiers kept for compatibility with existing data;
+        // the visible name is Lumen Player.
         app.setApplicationName("Vinil Player");
         app.setOrganizationName("VinilPlayer");
+        app.setApplicationDisplayName("Lumen Player");
+        app.setWindowIcon(lumenLogoIcon());
 
         QSettings settings;
-        Theme::setActiveTheme(Theme::themeById(settings.value("theme", "warm").toString()));
+        Theme::setActiveTheme(Theme::themeById(settings.value("theme", "lumen").toString()));
 
         app.setStyleSheet(Theme::globalStyleSheet());
 

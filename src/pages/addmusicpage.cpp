@@ -275,7 +275,7 @@ void AddMusicPage::dragEnterEvent(QDragEnterEvent *event) {
         m_isDragOver = true;
         m_dropZone->setStyleSheet(QString(
             "QWidget { border: 2px dashed %1; border-radius: 16px; background: %2; }"
-        ).arg(Theme::accent().name(), "rgba(232,164,74,0.12)"));
+        ).arg(Theme::accent().name(), Theme::accentRgba(0.12)));
         m_dropLabel->setText("Solte os arquivos aqui");
     }
 }

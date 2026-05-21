@@ -1,6 +1,7 @@
 #include "playerbar.h"
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QRandomGenerator>
 
 PlayerBar::PlayerBar(TrackModel *model, QWidget *parent)
     : QWidget(parent), m_model(model)
@@ -123,6 +124,17 @@ PlayerBar::PlayerBar(TrackModel *model, QWidget *parent)
     auto *volLayout = new QHBoxLayout();
     volLayout->setSpacing(8);
 
+    m_queueBtn = new QPushButton("\uE8FD", this);   // list/queue glyph
+    m_queueBtn->setFixedSize(24, 24);
+    m_queueBtn->setCursor(Qt::PointingHandCursor);
+    m_queueBtn->setFont(Theme::iconFont(14));
+    m_queueBtn->setToolTip("Fila de reprodu\u00E7\u00E3o");
+    m_queueBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: none; border-radius: 4px; }"
+        "QPushButton:hover { color: %2; background: rgba(255,255,255,0.05); }"
+    ).arg(Theme::textMuted().name(), Theme::textSoft().name()));
+    connect(m_queueBtn, &QPushButton::clicked, this, &PlayerBar::queueRequested);
+
     m_volIcon = new QPushButton("\uE15D", this);
     m_volIcon->setFixedSize(24, 24);
     m_volIcon->setCursor(Qt::PointingHandCursor);
@@ -140,12 +152,14 @@ PlayerBar::PlayerBar(TrackModel *model, QWidget *parent)
     m_volumeSlider->setStyleSheet(sliderStyle(Theme::textSoft().name()));
 
     volLayout->addStretch();
+    volLayout->addWidget(m_queueBtn);
+    volLayout->addSpacing(4);
     volLayout->addWidget(m_volIcon);
     volLayout->addWidget(m_volumeSlider);
 
     auto *rightWidget = new QWidget(this);
     rightWidget->setLayout(volLayout);
-    rightWidget->setFixedWidth(160);
+    rightWidget->setFixedWidth(196);
     rightWidget->setStyleSheet("background: transparent;");
     mainLayout->addWidget(rightWidget);
 
@@ -199,13 +213,60 @@ PlayerBar::PlayerBar(TrackModel *model, QWidget *parent)
     connect(m_player, &QMediaPlayer::mediaStatusChanged, this, &PlayerBar::onMediaStatusChanged);
 }
 
-void PlayerBar::playTrack(const Track &track) {
+void PlayerBar::playTrack(const Track &track, const QList<Track> &queue) {
+    m_queue = queue;   // set the playback context for next/prev/auto-advance
     if (m_currentTrackId == track.id) {
         togglePlay();
         return;
     }
+    loadAndPlay(track);
+}
 
+void PlayerBar::playKeepingContext(const Track &track) {
+    if (m_currentTrackId == track.id) { togglePlay(); return; }
+    loadAndPlay(track);
+}
+
+const QList<Track> &PlayerBar::activeQueue() const {
+    // Fall back to the full library when no explicit queue was given.
+    return m_queue.isEmpty() ? m_model->tracks() : m_queue;
+}
+
+void PlayerBar::enqueue(const Track &track) {
+    // If nothing is playing yet, just start it instead of only queueing.
+    if (m_currentTrackId == 0) {
+        loadAndPlay(track);
+        return;
+    }
+    m_userQueue.append(track);
+    emit queueChanged();
+}
+
+void PlayerBar::removeFromQueue(int index) {
+    if (index < 0 || index >= m_userQueue.size()) return;
+    m_userQueue.removeAt(index);
+    emit queueChanged();
+}
+
+bool PlayerBar::takeFromQueue(int index, Track &out) {
+    if (index < 0 || index >= m_userQueue.size()) return false;
+    out = m_userQueue.takeAt(index);
+    emit queueChanged();
+    return true;
+}
+
+QList<Track> PlayerBar::upcomingContext() const {
+    const QList<Track> &q = m_queue.isEmpty() ? m_model->tracks() : m_queue;
+    int idx = -1;
+    for (int i = 0; i < q.size(); ++i)
+        if (q[i].id == m_currentTrackId) { idx = i; break; }
+    if (idx < 0) return {};
+    return q.mid(idx + 1);
+}
+
+void PlayerBar::loadAndPlay(const Track &track) {
     m_currentTrackId = track.id;
+    m_currentTrack   = track;
     m_player->setSource(track.audioUrl);
     m_player->play();
 
@@ -227,6 +288,9 @@ void PlayerBar::playTrack(const Track &track) {
     updateControls();
     emit trackChanged(m_currentTrackId);
     emit playingChanged(true);
+
+    // Record this play in the listening history (last_played_at + play_count).
+    m_model->markPlayed(track.id);
 }
 
 void PlayerBar::togglePlay() {
@@ -247,23 +311,32 @@ void PlayerBar::togglePlay() {
 
 void PlayerBar::next() {
     if (m_currentTrackId == 0) return;
-    auto &tracks = m_model->tracks();
-    int idx = -1;
-    for (int i = 0; i < tracks.size(); ++i) {
-        if (tracks[i].id == m_currentTrackId) { idx = i; break; }
-    }
-    if (idx < 0) return;
 
-    int nextIdx;
-    if (m_repeat) {
-        nextIdx = idx;
-    } else {
-        nextIdx = m_model->nextIndex(idx, m_shuffle);
+    // Repeat-one wins over everything.
+    if (m_repeat) { loadAndPlay(m_currentTrack); return; }
+
+    // Manually queued tracks play before continuing the context.
+    if (!m_userQueue.isEmpty()) {
+        Track t = m_userQueue.takeFirst();
+        emit queueChanged();
+        loadAndPlay(t);
+        return;
     }
-    if (nextIdx >= 0 && nextIdx < tracks.size()) {
-        m_currentTrackId = 0; // force reload
-        playTrack(tracks[nextIdx]);
+
+    const QList<Track> &queue = activeQueue();
+    if (queue.isEmpty()) return;
+
+    int idx = -1;
+    for (int i = 0; i < queue.size(); ++i) {
+        if (queue[i].id == m_currentTrackId) { idx = i; break; }
     }
+    // Current track isn't part of the context (e.g. it came from the queue):
+    // start the context from its beginning.
+    if (idx < 0) { loadAndPlay(queue.first()); return; }
+
+    int nextIdx = m_shuffle ? QRandomGenerator::global()->bounded(queue.size())
+                            : (idx + 1) % queue.size();
+    loadAndPlay(queue[nextIdx]);
 }
 
 void PlayerBar::prev() {
@@ -272,18 +345,17 @@ void PlayerBar::prev() {
         m_player->setPosition(0);
         return;
     }
-    auto &tracks = m_model->tracks();
+    const QList<Track> &queue = activeQueue();
+    if (queue.isEmpty()) return;
+
     int idx = -1;
-    for (int i = 0; i < tracks.size(); ++i) {
-        if (tracks[i].id == m_currentTrackId) { idx = i; break; }
+    for (int i = 0; i < queue.size(); ++i) {
+        if (queue[i].id == m_currentTrackId) { idx = i; break; }
     }
     if (idx < 0) return;
 
-    int prevIdx = m_model->prevIndex(idx);
-    if (prevIdx >= 0 && prevIdx < tracks.size()) {
-        m_currentTrackId = 0;
-        playTrack(tracks[prevIdx]);
-    }
+    int prevIdx = (idx - 1 + queue.size()) % queue.size();
+    loadAndPlay(queue[prevIdx]);
 }
 
 void PlayerBar::setShuffle(bool on) { m_shuffle = on; }

@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QColorDialog>
+#include <QFileDialog>
 #include <QMenu>
 
 FoldersPage::FoldersPage(TrackModel *model, QWidget *parent)
@@ -123,12 +124,12 @@ void FoldersPage::refresh() {
         countLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::textMuted().name()));
         cardLayout->addWidget(countLabel);
 
-        // Clickable overlay
+        // Clickable overlay on top so clicks anywhere on the card navigate.
         auto *overlay = new QPushButton(card);
         overlay->setGeometry(0, 0, 180, 210);
         overlay->setStyleSheet("background: transparent; border: none;");
         overlay->setCursor(Qt::PointingHandCursor);
-        overlay->lower();
+        overlay->raise();
         connect(overlay, &QPushButton::clicked, [this]() { emit folderSelected(""); });
 
         grid->addWidget(card, row, col);
@@ -141,6 +142,7 @@ void FoldersPage::refresh() {
         int fid = f.id;
         QString fname = f.name;
         Theme::GradientPair fcover = f.cover;
+        QString fcoverImage = f.coverImage;
 
         auto *card = new QWidget();
         card->setFixedSize(180, 210);
@@ -151,10 +153,17 @@ void FoldersPage::refresh() {
         cardLayout->setContentsMargins(14, 14, 14, 14);
         cardLayout->setSpacing(8);
 
-        // Cover mosaic
+        // Cover: image (if set) > mosaic (4+ tracks) > folder gradient
+        QPixmap coverPix = fcoverImage.isEmpty() ? QPixmap()
+                                                 : Theme::roundedCover(fcoverImage, 152, 110, 8);
         auto *coverWidget = new QWidget();
         coverWidget->setFixedSize(152, 110);
-        if (ft.size() >= 4) {
+        if (!coverPix.isNull()) {
+            auto *imgLabel = new QLabel(coverWidget);
+            imgLabel->setGeometry(0, 0, 152, 110);
+            imgLabel->setPixmap(coverPix);
+            imgLabel->setStyleSheet("background: transparent;");
+        } else if (ft.size() >= 4) {
             auto *coverGrid = new QGridLayout(coverWidget);
             coverGrid->setSpacing(2);
             coverGrid->setContentsMargins(0, 0, 0, 0);
@@ -200,7 +209,7 @@ void FoldersPage::refresh() {
         cardLayout->addWidget(countLabel);
 
         // 3-dot menu
-        connect(menuBtn, &QPushButton::clicked, [this, fid, fname, fcover](bool) {
+        connect(menuBtn, &QPushButton::clicked, [this, fid, fname, fcover, fcoverImage](bool) {
             auto *menu = new QMenu(this);
             menu->setStyleSheet(QString(
                 "QMenu { background: %1; border: 1px solid %2; border-radius: 8px; padding: 4px; color: %3; }"
@@ -211,8 +220,8 @@ void FoldersPage::refresh() {
             menu->addAction(QString("\uE70F  Renomear"), [this, fid, fname]() {
                 showRenameDialog(fid, fname);
             });
-            menu->addAction(QString("\uE771  Editar capa"), [this, fid, fcover]() {
-                showCoverDialog(fid, fcover);
+            menu->addAction(QString("\uE771  Editar capa"), [this, fid, fcover, fcoverImage]() {
+                showCoverDialog(fid, fcover, fcoverImage);
             });
             menu->addSeparator();
             menu->addAction(QString("\uE107  Excluir playlist"), [this, fid, fname]() {
@@ -222,13 +231,16 @@ void FoldersPage::refresh() {
             menu->deleteLater();
         });
 
-        // Clickable overlay for card
+        // Clickable overlay on top so clicks anywhere on the card navigate.
         auto *overlay = new QPushButton(card);
         overlay->setGeometry(0, 0, 180, 210);
         overlay->setStyleSheet("background: transparent; border: none;");
         overlay->setCursor(Qt::PointingHandCursor);
-        overlay->lower();
+        overlay->raise();
         connect(overlay, &QPushButton::clicked, [this, fname]() { emit folderSelected(fname); });
+
+        // Keep the 3-dot menu clickable above the overlay.
+        menuBtn->raise();
 
         grid->addWidget(card, row, col);
         col++;
@@ -245,7 +257,7 @@ void FoldersPage::refresh() {
 void FoldersPage::showCreateDialog() {
     auto *dlg = new QDialog(this);
     dlg->setWindowTitle("Nova Playlist");
-    dlg->setFixedSize(380, 200);
+    dlg->setFixedSize(380, 270);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->setStyleSheet(QString(
         "QDialog { background: %1; }"
@@ -306,6 +318,36 @@ void FoldersPage::showCreateDialog() {
     colorRow->addStretch();
     layout->addLayout(colorRow);
 
+    // Optional cover image
+    QString *imagePath = new QString();
+    auto *imageRow = new QHBoxLayout();
+    imageRow->setSpacing(8);
+
+    auto *imgPreview = new QLabel();
+    imgPreview->setFixedSize(50, 32);
+    imgPreview->setStyleSheet(QString("background: %1; border-radius: 6px;").arg(Theme::bg().name()));
+    imageRow->addWidget(imgPreview);
+
+    auto *pickImageBtn = new QPushButton("Escolher imagem");
+    pickImageBtn->setFont(Theme::bodyFont(11));
+    pickImageBtn->setFixedHeight(32);
+    pickImageBtn->setCursor(Qt::PointingHandCursor);
+    pickImageBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: 1px solid %2; border-radius: 8px; padding: 0 12px; }"
+        "QPushButton:hover { background: rgba(255,255,255,0.05); }"
+    ).arg(Theme::textSoft().name(), Theme::border().name()));
+    connect(pickImageBtn, &QPushButton::clicked, [dlg, imagePath, imgPreview]() {
+        QString file = QFileDialog::getOpenFileName(dlg, "Escolher imagem da capa", QString(),
+            "Imagens (*.png *.jpg *.jpeg *.bmp *.webp)");
+        if (file.isEmpty()) return;
+        *imagePath = file;
+        QPixmap pm = Theme::roundedCover(file, 50, 32, 6);
+        if (!pm.isNull()) imgPreview->setPixmap(pm);
+    });
+    imageRow->addWidget(pickImageBtn);
+    imageRow->addStretch();
+    layout->addLayout(imageRow);
+
     // Buttons
     auto *btnRow = new QHBoxLayout();
     btnRow->addStretch();
@@ -328,17 +370,17 @@ void FoldersPage::showCreateDialog() {
         "QPushButton { background: %1; color: %2; border: none; border-radius: 18px; padding: 0 20px; font-weight: bold; }"
         "QPushButton:hover { background: %3; }"
     ).arg(Theme::accent().name(), Theme::bg().name(), Theme::accent().lighter(110).name()));
-    connect(createBtn2, &QPushButton::clicked, [this, dlg, nameEdit, c1, c2]() {
+    connect(createBtn2, &QPushButton::clicked, [this, dlg, nameEdit, c1, c2, imagePath]() {
         QString name = nameEdit->text().trimmed();
         if (name.isEmpty()) return;
-        m_model->createPlaylist(name, *c1, *c2);
-        delete c1; delete c2;
+        m_model->createPlaylist(name, *c1, *c2, *imagePath);
+        delete c1; delete c2; delete imagePath;
         dlg->accept();
     });
     btnRow->addWidget(createBtn2);
     layout->addLayout(btnRow);
 
-    connect(dlg, &QDialog::rejected, [c1, c2]() { delete c1; delete c2; });
+    connect(dlg, &QDialog::rejected, [c1, c2, imagePath]() { delete c1; delete c2; delete imagePath; });
     connect(nameEdit, &QLineEdit::returnPressed, createBtn2, &QPushButton::click);
     dlg->exec();
 }
@@ -399,10 +441,10 @@ void FoldersPage::showRenameDialog(int id, const QString &currentName) {
     dlg->exec();
 }
 
-void FoldersPage::showCoverDialog(int id, const Theme::GradientPair &current) {
+void FoldersPage::showCoverDialog(int id, const Theme::GradientPair &current, const QString &currentImage) {
     auto *dlg = new QDialog(this);
     dlg->setWindowTitle("Editar Capa");
-    dlg->setFixedSize(300, 160);
+    dlg->setFixedSize(320, 230);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->setStyleSheet(QString("QDialog { background: %1; } QLabel { background: transparent; color: %2; }")
         .arg(Theme::surface().name(), Theme::text().name()));
@@ -464,6 +506,56 @@ void FoldersPage::showCoverDialog(int id, const Theme::GradientPair &current) {
     colorRow->addStretch();
     layout->addLayout(colorRow);
 
+    // Optional cover image (overrides the gradient when set)
+    QString *imagePath = new QString(currentImage);
+    auto *imageRow = new QHBoxLayout();
+    imageRow->setSpacing(8);
+
+    auto *imgPreview = new QLabel();
+    imgPreview->setFixedSize(50, 32);
+    imgPreview->setStyleSheet(QString("background: %1; border-radius: 6px;").arg(Theme::bg().name()));
+    if (!currentImage.isEmpty()) {
+        QPixmap pm = Theme::roundedCover(currentImage, 50, 32, 6);
+        if (!pm.isNull()) imgPreview->setPixmap(pm);
+    }
+    imageRow->addWidget(imgPreview);
+
+    auto *pickImageBtn = new QPushButton("Escolher imagem");
+    pickImageBtn->setFont(Theme::bodyFont(11));
+    pickImageBtn->setFixedHeight(32);
+    pickImageBtn->setCursor(Qt::PointingHandCursor);
+    pickImageBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: 1px solid %2; border-radius: 8px; padding: 0 10px; }"
+        "QPushButton:hover { background: rgba(255,255,255,0.05); }"
+    ).arg(Theme::textSoft().name(), Theme::border().name()));
+    connect(pickImageBtn, &QPushButton::clicked, [dlg, imagePath, imgPreview]() {
+        QString file = QFileDialog::getOpenFileName(dlg, "Escolher imagem da capa", QString(),
+            "Imagens (*.png *.jpg *.jpeg *.bmp *.webp)");
+        if (file.isEmpty()) return;
+        *imagePath = file;
+        QPixmap pm = Theme::roundedCover(file, 50, 32, 6);
+        if (!pm.isNull()) imgPreview->setPixmap(pm);
+    });
+    imageRow->addWidget(pickImageBtn);
+
+    auto *clearImageBtn = new QPushButton("Remover");
+    clearImageBtn->setFont(Theme::bodyFont(11));
+    clearImageBtn->setFixedHeight(32);
+    clearImageBtn->setCursor(Qt::PointingHandCursor);
+    clearImageBtn->setToolTip("Voltar a usar o gradiente de cores");
+    clearImageBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: 1px solid %2; border-radius: 8px; padding: 0 10px; }"
+        "QPushButton:hover { background: rgba(255,255,255,0.05); }"
+    ).arg(Theme::textSoft().name(), Theme::border().name()));
+    connect(clearImageBtn, &QPushButton::clicked, [imagePath, imgPreview]() {
+        imagePath->clear();
+        imgPreview->setPixmap(QPixmap());
+        imgPreview->setStyleSheet(QString("background: %1; border-radius: 6px;").arg(Theme::bg().name()));
+    });
+    imageRow->addWidget(clearImageBtn);
+    imageRow->addStretch();
+    layout->addLayout(imageRow);
+
     auto *btnRow = new QHBoxLayout();
     btnRow->addStretch();
     auto *cancelBtn = new QPushButton("Cancelar");
@@ -474,7 +566,7 @@ void FoldersPage::showCoverDialog(int id, const Theme::GradientPair &current) {
         "QPushButton { background: transparent; color: %1; border: 1px solid %2; border-radius: 17px; padding: 0 14px; }"
         "QPushButton:hover { background: rgba(255,255,255,0.05); }"
     ).arg(Theme::textSoft().name(), Theme::border().name()));
-    connect(cancelBtn, &QPushButton::clicked, [dlg, c1, c2]() { delete c1; delete c2; dlg->reject(); });
+    connect(cancelBtn, &QPushButton::clicked, [dlg, c1, c2, imagePath]() { delete c1; delete c2; delete imagePath; dlg->reject(); });
     btnRow->addWidget(cancelBtn);
 
     auto *saveBtn = new QPushButton("Salvar");
@@ -485,9 +577,13 @@ void FoldersPage::showCoverDialog(int id, const Theme::GradientPair &current) {
         "QPushButton { background: %1; color: %2; border: none; border-radius: 17px; padding: 0 18px; font-weight: bold; }"
         "QPushButton:hover { background: %3; }"
     ).arg(Theme::accent().name(), Theme::bg().name(), Theme::accent().lighter(110).name()));
-    connect(saveBtn, &QPushButton::clicked, [this, dlg, id, c1, c2]() {
+    connect(saveBtn, &QPushButton::clicked, [this, dlg, id, c1, c2, imagePath, currentImage]() {
         m_model->updatePlaylistCover(id, *c1, *c2);
-        delete c1; delete c2;
+        // Only touch the image when it actually changed, to avoid re-copying
+        // the already-stored file on every save.
+        if (*imagePath != currentImage)
+            m_model->updatePlaylistCoverImage(id, *imagePath);
+        delete c1; delete c2; delete imagePath;
         dlg->accept();
     });
     btnRow->addWidget(saveBtn);

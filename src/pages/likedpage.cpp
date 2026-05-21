@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QFrame>
+#include "hoverplayfilter.h"
 
 LikedPage::LikedPage(TrackModel *model, QWidget *parent)
     : QWidget(parent), m_model(model)
@@ -101,6 +102,21 @@ void LikedPage::refresh(int currentTrackId, bool isPlaying) {
         return;
     }
 
+    // Play the whole liked collection (it behaves as its own playlist).
+    auto *playBtn = new QPushButton(QStringLiteral("\uE102"));
+    playBtn->setFixedSize(48, 48);
+    playBtn->setCursor(Qt::PointingHandCursor);
+    playBtn->setFont(Theme::iconFont(16));
+    playBtn->setToolTip("Tocar curtidas");
+    playBtn->setStyleSheet(QString(
+        "QPushButton { background: %1; color: %2; border: none; border-radius: 24px; font-family: \"Segoe MDL2 Assets\"; font-size: 16px; }"
+        "QPushButton:hover { background: %3; }"
+    ).arg(Theme::accent().name(), Theme::bg().name(), Theme::accent().lighter(110).name()));
+    Track firstLiked = liked.first();
+    connect(playBtn, &QPushButton::clicked, [this, firstLiked]() { emit playRequested(firstLiked); });
+    m_contentLayout->addWidget(playBtn, 0, Qt::AlignLeft);
+    m_contentLayout->addSpacing(8);
+
     // Track list
     for (int i = 0; i < liked.size(); ++i) {
         auto &track = liked[i];
@@ -112,23 +128,26 @@ void LikedPage::refresh(int currentTrackId, bool isPlaying) {
         row->setObjectName("trackRow");
         row->setStyleSheet(QString(
             "QWidget#trackRow { background: %1; border-radius: 8px; border-left: 3px solid %2; }"
-        ).arg(active ? "rgba(232,164,74,0.12)" : "transparent",
+        ).arg(active ? Theme::accentRgba(0.12) : QStringLiteral("transparent"),
               active ? Theme::accent().name() : "transparent"));
 
         auto *layout = new QHBoxLayout(row);
         layout->setContentsMargins(12, 4, 12, 4);
         layout->setSpacing(12);
 
-        auto *idx = new QLabel(QString("%1").arg(i + 1, 2, 10, QChar('0')));
+        QString idxNum = QString("%1").arg(i + 1, 2, 10, QChar('0'));
+        auto *idx = new QLabel(active ? QStringLiteral("\uE102") : idxNum);
         idx->setFont(Theme::monoFont(12));
         idx->setFixedWidth(28);
         idx->setAlignment(Qt::AlignCenter);
-        idx->setStyleSheet(QString("color: %1; background: transparent;").arg(
+        idx->setStyleSheet(QString("color: %1; background: transparent; font-family: \"Segoe MDL2 Assets\", Consolas;").arg(
             active ? Theme::accent().name() : Theme::textMuted().name()));
+        idx->setAttribute(Qt::WA_TransparentForMouseEvents);  // let clicks reach the play overlay
         layout->addWidget(idx);
 
         auto *swatch = new QWidget();
         swatch->setFixedSize(38, 38);
+        swatch->setAttribute(Qt::WA_TransparentForMouseEvents);
         swatch->setStyleSheet(QString("background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 %1,stop:1 %2); border-radius: 6px;")
             .arg(track.cover.c1.name(), track.cover.c2.name()));
         layout->addWidget(swatch);
@@ -137,19 +156,28 @@ void LikedPage::refresh(int currentTrackId, bool isPlaying) {
         infoCol->setSpacing(1);
         auto *titleLabel = new QLabel(track.title);
         titleLabel->setFont(Theme::bodyFont(13));
+        titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
         titleLabel->setStyleSheet(QString("color: %1; background: transparent; font-weight: 600;").arg(
             active ? Theme::accent().name() : Theme::text().name()));
         auto *artistLabel = new QLabel(track.artist);
         artistLabel->setFont(Theme::bodyFont(11));
+        artistLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
         artistLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::textSoft().name()));
         infoCol->addWidget(titleLabel);
         infoCol->addWidget(artistLabel);
         layout->addLayout(infoCol, 1);
 
         if (!track.folder.isEmpty()) {
-            auto *tag = new QLabel(track.folder);
+            auto *tag = new QPushButton(track.folder);
             tag->setFont(Theme::bodyFont(10));
-            tag->setStyleSheet(QString("color: %1; background: rgba(232,164,74,0.1); border-radius: 10px; padding: 2px 8px;").arg(Theme::accentDim().name()));
+            tag->setCursor(Qt::PointingHandCursor);
+            tag->setToolTip(QString("Ir para a playlist \"%1\"").arg(track.folder));
+            tag->setStyleSheet(QString(
+                "QPushButton { color: %1; background: " + Theme::accentRgba(0.10) + "; border: none; border-radius: 10px; padding: 2px 8px; }"
+                "QPushButton:hover { background: " + Theme::accentRgba(0.28) + "; color: %2; }"
+            ).arg(Theme::accentDim().name(), Theme::text().name()));
+            QString folderName = track.folder;
+            connect(tag, &QPushButton::clicked, [this, folderName]() { emit navigateToFolder(folderName); });
             layout->addWidget(tag);
         }
 
@@ -160,6 +188,45 @@ void LikedPage::refresh(int currentTrackId, bool isPlaying) {
         int lid = track.id;
         connect(likeBtn, &QPushButton::clicked, [this, lid]() { emit likeToggled(lid); });
         layout->addWidget(likeBtn);
+
+        auto *enqueueBtn = new QPushButton(QStringLiteral("\uE710"));
+        enqueueBtn->setFixedSize(28, 28);
+        enqueueBtn->setCursor(Qt::PointingHandCursor);
+        enqueueBtn->setFont(Theme::iconFont(11));
+        enqueueBtn->setToolTip("Adicionar à fila");
+        enqueueBtn->setStyleSheet(QString(
+            "QPushButton { background: transparent; color: %1; border: none; font-family: \"Segoe MDL2 Assets\"; }"
+            "QPushButton:hover { color: %2; }"
+        ).arg(Theme::textMuted().name(), Theme::accent().name()));
+        Track eqt = track;
+        connect(enqueueBtn, &QPushButton::clicked, [this, eqt]() { emit enqueueRequested(eqt); });
+        layout->addWidget(enqueueBtn);
+
+        auto *editBtn = new QPushButton(QStringLiteral("\uE70F"));
+        editBtn->setFixedSize(28, 28);
+        editBtn->setCursor(Qt::PointingHandCursor);
+        editBtn->setFont(Theme::iconFont(11));
+        editBtn->setToolTip("Editar música");
+        editBtn->setStyleSheet(QString(
+            "QPushButton { background: transparent; color: %1; border: none; font-family: \"Segoe MDL2 Assets\"; }"
+            "QPushButton:hover { color: %2; }"
+        ).arg(Theme::textMuted().name(), Theme::accent().name()));
+        Track et = track;
+        connect(editBtn, &QPushButton::clicked, [this, et]() { emit editTrackRequested(et); });
+        layout->addWidget(editBtn);
+
+        auto *delBtn = new QPushButton(QStringLiteral("\uE107"));
+        delBtn->setFixedSize(28, 28);
+        delBtn->setCursor(Qt::PointingHandCursor);
+        delBtn->setFont(Theme::iconFont(11));
+        delBtn->setToolTip("Excluir música");
+        delBtn->setStyleSheet(QString(
+            "QPushButton { background: transparent; color: %1; border: none; font-family: \"Segoe MDL2 Assets\"; }"
+            "QPushButton:hover { color: %2; }"
+        ).arg(Theme::textMuted().name(), Theme::danger().name()));
+        int did = track.id;
+        connect(delBtn, &QPushButton::clicked, [this, did]() { emit deleteRequested(did); });
+        layout->addWidget(delBtn);
 
         auto *dur = new QLabel(Theme::formatTime(track.durationMs));
         dur->setFont(Theme::monoFont(11));
@@ -175,6 +242,7 @@ void LikedPage::refresh(int currentTrackId, bool isPlaying) {
         overlay->setCursor(Qt::PointingHandCursor);
         overlay->lower();
         connect(overlay, &QPushButton::clicked, [this, t]() { emit playRequested(t); });
+        if (!active) overlay->installEventFilter(new HoverPlayFilter(idx, idxNum, overlay));
 
         m_contentLayout->addWidget(row);
     }

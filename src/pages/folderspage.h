@@ -19,7 +19,7 @@ signals:
 private slots:
     void showCreateDialog();
     void showRenameDialog(int id, const QString &currentName);
-    void showCoverDialog(int id, const Theme::GradientPair &current);
+    void showCoverDialog(int id, const Theme::GradientPair &current, const QString &currentImage);
     void showDeleteConfirm(int id, const QString &name);
 
 private:
