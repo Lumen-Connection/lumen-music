@@ -5,6 +5,17 @@ TEMPLATE = app
 
 CONFIG += c++17
 
+# Windows executable icon + metadata.
+# Use a custom .rc with a relative icon path: windres (MinGW) can't open the
+# absolute path because it contains a non-ASCII character ("Área").
+win32 {
+    RC_FILE = resources/app.rc
+    VERSION = 1.0.0
+    QMAKE_TARGET_PRODUCT = Lumen Player
+    QMAKE_TARGET_DESCRIPTION = Lumen Player
+    QMAKE_TARGET_COMPANY = Lumen Connection
+}
+
 INCLUDEPATH += \
     src \
     src/pages \

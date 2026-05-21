@@ -5,6 +5,9 @@
 build/
 debug/
 release/
+
+# Release packaging (windeployqt output + zips)
+dist/
 Makefile
 Makefile.Debug
 Makefile.Release
@@ -20,6 +23,7 @@ Makefile.Release
 # qmake generated
 .qmake.stash
 *.user.stash
+*_resource.rc
 
 # Qt Creator (configuracoes especificas da sua maquina)
 .qtcreator/
