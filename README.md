@@ -118,5 +118,5 @@ Projeto feito por Lumen Connection(Conheça mais em lumenconnection.com.br), dis
 ---
 
 <div align="center">
-Feito com C++ e Qt • <strong>Lumen Player</strong>
+Feito com C++ e Qt • <strong>Lumen Connection</strong>
 </div>
