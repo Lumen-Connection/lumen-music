@@ -1,6 +1,6 @@
 QT       += core gui widgets multimedia sql
 
-TARGET = VinilPlayer
+TARGET = LumenPlayer
 TEMPLATE = app
 
 CONFIG += c++17

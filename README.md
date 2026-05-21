@@ -81,7 +81,7 @@ Para rodar em um PC sem o Qt instalado, empacote com o `windeployqt`:
 ```powershell
 $dist = "dist\LumenPlayer"
 New-Item -ItemType Directory -Force $dist | Out-Null
-Copy-Item release\VinilPlayer.exe "$dist\LumenPlayer.exe"
+Copy-Item release\LumenPlayer.exe "$dist\LumenPlayer.exe"
 windeployqt --release --compiler-runtime --no-translations "$dist\LumenPlayer.exe"
 Compress-Archive -Path "$dist\*" -DestinationPath "dist\LumenPlayer-win64.zip" -Force
 ```
