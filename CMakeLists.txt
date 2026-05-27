@@ -16,8 +16,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # --- Qt ---------------------------------------------------------------------
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Multimedia Sql)
 
-# Runs moc/rcc/uic automatically (equivalent to qmake's built-in handling).
+# Runs moc/uic automatically (equivalent to qmake's built-in handling).
 qt_standard_project_setup()
+
+# Compile .qrc resources (e.g. the app icon). qt_standard_project_setup enables
+# AUTOMOC/AUTOUIC but not AUTORCC, so turn it on explicitly — otherwise the .qrc
+# passed to qt_add_executable is silently ignored and ":/..." paths resolve to
+# nothing at runtime.
+set(CMAKE_AUTORCC ON)
 
 # --- Target -----------------------------------------------------------------
 set(PROJECT_SOURCES
@@ -52,7 +58,6 @@ set(PROJECT_HEADERS
     src/widgets/theme.h
     src/widgets/hoverplayfilter.h
     src/widgets/reorderablelist.h
-    src/widgets/lumenlogo.h
 )
 
 qt_add_executable(LumenMusic

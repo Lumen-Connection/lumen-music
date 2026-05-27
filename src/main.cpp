@@ -2,7 +2,7 @@
 #include <QSettings>
 #include "mainwindow.h"
 #include "theme.h"
-#include "lumenlogo.h"
+#include <QIcon>
 
 static const int RESTART_CODE = 1000;
 
@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
         app.setApplicationName("Vinil Player");
         app.setOrganizationName("VinilPlayer");
         app.setApplicationDisplayName("Lumen Music");
-        app.setWindowIcon(lumenLogoIcon());
+        app.setWindowIcon(QIcon(":/icon.png"));
 
         QSettings settings;
         Theme::setActiveTheme(Theme::themeById(settings.value("theme", "lumen").toString()));
