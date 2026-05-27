@@ -43,6 +43,9 @@ signals:
     void queueChanged();
     void queueRequested();   // user asked to open the queue view
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+
 private slots:
     void onPositionChanged(qint64 pos);
     void onDurationChanged(qint64 dur);

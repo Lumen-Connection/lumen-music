@@ -16,6 +16,7 @@
 #include <QStandardPaths>
 #include <QDateTime>
 #include <QProcessEnvironment>
+#include <QSettings>
 #include <algorithm>
 
 AddMusicPage::AddMusicPage(TrackModel *model, QWidget *parent)
@@ -104,6 +105,30 @@ AddMusicPage::AddMusicPage(TrackModel *model, QWidget *parent)
     urlRow->addWidget(m_downloadBtn);
 
     urlCardLayout->addLayout(urlRow);
+
+    // Configurable destination folder for downloads.
+    auto *downloadFolderRow = new QHBoxLayout();
+    downloadFolderRow->setSpacing(8);
+
+    m_downloadFolderLabel = new QLabel();
+    m_downloadFolderLabel->setFont(Theme::bodyFont(11));
+    m_downloadFolderLabel->setStyleSheet(QString("color: %1; background: transparent;")
+        .arg(Theme::textMuted().name()));
+    m_downloadFolderLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    downloadFolderRow->addWidget(m_downloadFolderLabel, 1);
+
+    auto *changeFolderBtn = new QPushButton("Alterar");
+    changeFolderBtn->setCursor(Qt::PointingHandCursor);
+    changeFolderBtn->setFont(Theme::bodyFont(11));
+    changeFolderBtn->setStyleSheet(QString(
+        "QPushButton { background: transparent; color: %1; border: 1px solid %2; border-radius: 6px; padding: 3px 10px; }"
+        "QPushButton:hover { color: %3; border-color: %3; }"
+    ).arg(Theme::textSoft().name(), Theme::border().name(), Theme::accent().name()));
+    connect(changeFolderBtn, &QPushButton::clicked, this, &AddMusicPage::chooseDownloadFolder);
+    downloadFolderRow->addWidget(changeFolderBtn, 0);
+
+    urlCardLayout->addLayout(downloadFolderRow);
+    updateDownloadFolderLabel();
 
     m_downloadStatus = new QLabel();
     m_downloadStatus->setFont(Theme::bodyFont(11));
@@ -503,6 +528,30 @@ static QString findFfmpeg() {
     return {};
 }
 
+QString AddMusicPage::downloadDir() const {
+    QSettings settings;
+    QString fallback =
+        QStandardPaths::writableLocation(QStandardPaths::MusicLocation) + "/Lumen Music";
+    QString dir = settings.value("downloadDir").toString();
+    if (dir.isEmpty()) dir = fallback;
+    QDir().mkpath(dir);
+    return dir;
+}
+
+void AddMusicPage::chooseDownloadFolder() {
+    QString dir = QFileDialog::getExistingDirectory(
+        this, "Escolher pasta de downloads", downloadDir());
+    if (dir.isEmpty()) return;            // user cancelled
+    QSettings().setValue("downloadDir", dir);
+    updateDownloadFolderLabel();
+}
+
+void AddMusicPage::updateDownloadFolderLabel() {
+    if (m_downloadFolderLabel)
+        m_downloadFolderLabel->setText(
+            "Salvar em: " + QDir::toNativeSeparators(downloadDir()));
+}
+
 void AddMusicPage::startDownload() {
     if (m_downloadProcess) return;
 
@@ -516,8 +565,7 @@ void AddMusicPage::startDownload() {
         return;
     }
 
-    QString outDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/downloads";
-    QDir().mkpath(outDir);
+    QString outDir = downloadDir();
 
     // Unique prefix per download session — avoids any before/after comparison issues
     m_downloadPrefix = QString::number(QDateTime::currentMSecsSinceEpoch());
@@ -573,7 +621,7 @@ void AddMusicPage::startDownload() {
             return;
         }
 
-        QString outDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/downloads";
+        QString outDir = downloadDir();
         // Find files that match the unique prefix for this download session.
         // The extension depends on whether ffmpeg remuxed to .opus or we kept
         // the native stream (.webm/.m4a), so accept any known audio extension.

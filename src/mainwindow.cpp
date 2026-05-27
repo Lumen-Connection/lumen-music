@@ -9,14 +9,14 @@
 #include <QResizeEvent>
 #include <QLineEdit>
 #include <QMessageBox>
-#include "lumenlogo.h"
+#include <QIcon>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setWindowTitle("Lumen Music");
     resize(1100, 720);
-    setMinimumSize(900, 550);
+    setMinimumSize(720, 480);
 
     m_model = new TrackModel(this);
 
@@ -198,8 +198,11 @@ void MainWindow::buildSidebar(QWidget *sidebar) {
     logoLayout->setContentsMargins(20, 20, 20, 16);
     logoLayout->setSpacing(8);
 
-    auto *logoIcon = new LumenLogo();
+    auto *logoIcon = new QLabel();
     logoIcon->setFixedSize(30, 30);
+    logoIcon->setScaledContents(true);
+    logoIcon->setStyleSheet("background: transparent;");
+    logoIcon->setPixmap(QIcon(":/icon.png").pixmap(30, 30));
     logoLayout->addWidget(logoIcon);
 
     auto *logoText = new QLabel("Lumen");

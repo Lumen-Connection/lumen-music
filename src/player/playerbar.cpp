@@ -2,6 +2,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QRandomGenerator>
+#include <QResizeEvent>
 
 PlayerBar::PlayerBar(TrackModel *model, QWidget *parent)
     : QWidget(parent), m_model(model)
@@ -211,6 +212,14 @@ PlayerBar::PlayerBar(TrackModel *model, QWidget *parent)
     connect(m_player, &QMediaPlayer::positionChanged, this, &PlayerBar::onPositionChanged);
     connect(m_player, &QMediaPlayer::durationChanged, this, &PlayerBar::onDurationChanged);
     connect(m_player, &QMediaPlayer::mediaStatusChanged, this, &PlayerBar::onMediaStatusChanged);
+}
+
+void PlayerBar::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    // The empty-state label isn't in a layout (the controls take over once a
+    // track loads), so keep it spanning the whole bar — that way the centered
+    // text never gets clipped on a narrow window.
+    if (m_emptyLabel) m_emptyLabel->setGeometry(rect());
 }
 
 void PlayerBar::playTrack(const Track &track, const QList<Track> &queue) {
