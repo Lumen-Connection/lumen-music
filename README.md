@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔶 Lumen Player
+# 🔶 Lumen Music
 
 **Um player de música de desktop, leve e elegante feito em C++ com Qt.**
 
@@ -17,7 +17,7 @@ Biblioteca local, playlists com capa, fila de reprodução, histórico de reprod
 
 ## Sobre
 
-O **Lumen Player** é um reprodutor de áudio local com foco em uma experiência limpa e fluida.
+O **Lumen Music** é um reprodutor de áudio local com foco em uma experiência limpa e fluida.
 Você importa seus arquivos, organiza em playlists, curte faixas e controla tudo por uma
 interface escura e minimalista. Sem nuvem, sem cadastro, tudo guardado localmente.
 
@@ -48,7 +48,7 @@ interface escura e minimalista. Sem nuvem, sem cadastro, tudo guardado localment
 
 - **Linguagem:** C++17
 - **Framework:** Qt 6 (Widgets, Multimedia, SQL)
-- **Build:** qmake + MinGW
+- **Build:** CMake + Ninja + MinGW
 - **Persistência:** SQLite (banco local)
 
 ## Compilando o projeto
@@ -58,36 +58,68 @@ interface escura e minimalista. Sem nuvem, sem cadastro, tudo guardado localment
   **Multimedia** e **SQL**
 
 ### Opção A — Qt Creator (mais simples)
-1. Abra o arquivo `VinilPlayer.pro` no Qt Creator
+1. Abra o arquivo `CMakeLists.txt` no Qt Creator
 2. Selecione o kit **Desktop Qt 6.x MinGW 64-bit**
 3. Clique em **Run**
 
 ### Opção B — Linha de comando (PowerShell)
-Ajuste os caminhos do Qt/MinGW para os da sua instalação:
+O projeto usa **CMake** com **presets** (`CMakePresets.json`). Ajuste os caminhos
+do Qt/MinGW dentro dos presets para os da sua instalação, se forem diferentes.
 
 ```powershell
-$env:Path = "D:\Qt\Tools\mingw1310_64\bin;D:\Qt\6.11.0\mingw_64\bin;" + $env:Path
+# Coloque o CMake/Ninja/MinGW do Qt no PATH (ajuste para a sua versão):
+$env:Path = "D:\Qt\Tools\CMake_64\bin;D:\Qt\Tools\Ninja;D:\Qt\Tools\mingw1310_64\bin;D:\Qt\6.11.0\mingw_64\bin;" + $env:Path
 
-qmake -o Makefile VinilPlayer.pro -spec win32-g++ "CONFIG+=release"
-mingw32-make -f Makefile.Release
+cmake --preset release        # configura
+cmake --build --preset release  # compila
 ```
 
-O executável é gerado em `release/`.
+> **Caminho com acentos/espaços:** as ferramentas do MinGW (moc/windres) não
+> lidam bem com diretórios de build contendo caracteres não-ASCII (ex.: "Área de
+> Trabalho"). Por isso os presets geram o build em
+> `%LOCALAPPDATA%\LumenMusic-build\<preset>` (caminho ASCII), e não dentro do
+> repositório. O executável `LumenMusic.exe` fica nessa pasta.
+
+Para compilar sem presets, aponte o diretório de build para um caminho sem acentos:
+
+```powershell
+cmake -S . -B "$env:LOCALAPPDATA\LumenMusic-build\release" -G Ninja `
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="D:/Qt/6.11.0/mingw_64"
+cmake --build "$env:LOCALAPPDATA\LumenMusic-build\release"
+```
 
 ## Gerando um pacote distribuível
 
-Para rodar em um PC sem o Qt instalado, empacote com o `windeployqt`:
+O empacotamento é automático: o `install` do CMake chama o `windeployqt`, então
+um `cmake --install` ou um `cpack` já produzem uma pasta/zip que roda num PC
+**sem o Qt instalado**.
+
+### Pasta autossuficiente (`cmake --install`)
 
 ```powershell
-$dist = "dist\LumenPlayer"
-New-Item -ItemType Directory -Force $dist | Out-Null
-Copy-Item release\LumenPlayer.exe "$dist\LumenPlayer.exe"
-windeployqt --release --compiler-runtime --no-translations "$dist\LumenPlayer.exe"
-Compress-Archive -Path "$dist\*" -DestinationPath "dist\LumenPlayer-win64.zip" -Force
+$build = "$env:LOCALAPPDATA\LumenMusic-build\release"
+cmake --install $build --prefix dist\LumenMusic
 ```
 
-Teste rodando `dist\LumenPlayer.exe` e reproduzindo uma música (valida os plugins de
-multimídia e o driver SQLite).
+Gera `dist\LumenMusic\` com `LumenMusic.exe`, `yt-dlp.exe`, as DLLs do Qt e os
+plugins. Teste rodando `dist\LumenMusic\LumenMusic.exe` e reproduzindo uma música
+(valida os plugins de multimídia e o driver SQLite).
+
+### ZIP de release (`cpack`)
+
+```powershell
+$build = "$env:LOCALAPPDATA\LumenMusic-build\release"
+cpack --config "$build\CPackConfig.cmake" -G ZIP -B dist
+```
+
+Gera `dist\LumenMusic-v<versão>-win64.zip`. A versão vem de uma única fonte — o
+`project(... VERSION ...)` no `CMakeLists.txt` —, que também é embutida no
+`.exe` (VERSIONINFO) e lida automaticamente pelo instalador Inno Setup.
+
+### Instalador (Inno Setup, opcional)
+
+Com a pasta `dist\LumenMusic` pronta, compile `installer\lumen-music.iss` com o
+`ISCC.exe`. A versão é lida direto do `.exe`, então não há número para manter à mão.
 
 ## Licença
 

@@ -1,6 +1,6 @@
 QT       += core gui widgets multimedia sql
 
-TARGET = LumenPlayer
+TARGET = LumenMusic
 TEMPLATE = app
 
 CONFIG += c++17
@@ -11,8 +11,8 @@ CONFIG += c++17
 win32 {
     RC_FILE = resources/app.rc
     VERSION = 1.1.0
-    QMAKE_TARGET_PRODUCT = Lumen Player
-    QMAKE_TARGET_DESCRIPTION = Lumen Player
+    QMAKE_TARGET_PRODUCT = Lumen Music
+    QMAKE_TARGET_DESCRIPTION = Lumen Music
     QMAKE_TARGET_COMPANY = Lumen Connection
 
     HELPER_SRC = $$PWD/src/thirdparty/yt-dlp.exe

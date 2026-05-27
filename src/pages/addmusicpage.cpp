@@ -138,7 +138,7 @@ AddMusicPage::AddMusicPage(TrackModel *model, QWidget *parent)
     m_dropLabel->setAlignment(Qt::AlignCenter);
     dropLayout->addWidget(m_dropLabel);
 
-    auto *formatLabel = new QLabel("Somente arquivos OPUS");
+    auto *formatLabel = new QLabel("Opus, WebM, M4A, MP3, OGG, FLAC, WAV");
     formatLabel->setFont(Theme::bodyFont(11));
     formatLabel->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::textMuted().name()));
     formatLabel->setAlignment(Qt::AlignCenter);
@@ -160,7 +160,7 @@ AddMusicPage::AddMusicPage(TrackModel *model, QWidget *parent)
     ).arg(Theme::card().name(), Theme::textSoft().name(), Theme::border().name(), Theme::cardHover().name()));
     connect(browseBtn, &QPushButton::clicked, [this]() {
         QStringList files = QFileDialog::getOpenFileNames(this, "Selecionar Músicas", QString(),
-            "Opus (*.opus)");
+            "Áudio (*.opus *.webm *.m4a *.mp3 *.ogg *.oga *.flac *.wav *.aac)");
         if (!files.isEmpty()) processFiles(files);
     });
     layout->addWidget(browseBtn, 0, Qt::AlignLeft);
@@ -303,8 +303,15 @@ void AddMusicPage::dragLeaveEvent(QDragLeaveEvent *) {
     m_dropLabel->setText("Clique ou arraste arquivos de áudio");
 }
 
+// Audio extensions the app accepts. Opus is the preferred format, but the Qt
+// ffmpeg multimedia backend (bundled) also plays these — so YouTube downloads
+// can land as native .webm/Opus or .m4a/AAC when ffmpeg isn't installed to
+// remux them into a clean .opus.
+static const QStringList kAudioExts =
+    {"opus", "webm", "m4a", "mp3", "ogg", "oga", "flac", "wav", "aac"};
+
 void AddMusicPage::processFiles(const QStringList &paths) {
-    QStringList audioExts = {"opus"};
+    const QStringList &audioExts = kAudioExts;
 
     for (auto &path : paths) {
         QFileInfo fi(path);
@@ -567,14 +574,18 @@ void AddMusicPage::startDownload() {
         }
 
         QString outDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/downloads";
-        // Find files that match the unique prefix for this download session
+        // Find files that match the unique prefix for this download session.
+        // The extension depends on whether ffmpeg remuxed to .opus or we kept
+        // the native stream (.webm/.m4a), so accept any known audio extension.
         QStringList added;
-        for (const auto &f : QDir(outDir).entryList({m_downloadPrefix + "_*.opus"}, QDir::Files))
-            added.append(outDir + "/" + f);
+        for (const auto &f : QDir(outDir).entryList({m_downloadPrefix + "_*"}, QDir::Files)) {
+            if (kAudioExts.contains(QFileInfo(f).suffix().toLower()))
+                added.append(outDir + "/" + f);
+        }
 
         if (added.isEmpty()) {
             m_downloadStatus->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::danger().name()));
-            m_downloadStatus->setText("Download concluído, mas nenhum arquivo .opus encontrado.");
+            m_downloadStatus->setText("Download concluído, mas nenhum arquivo de áudio encontrado.");
             return;
         }
 
@@ -606,14 +617,35 @@ void AddMusicPage::startDownload() {
         return;
     }
 
-    const QStringList args = {
-        "-x",
-        "--audio-format", "opus",
-        "--audio-quality", "0",
-        "--no-playlist",
-        "-o", outDir + "/" + m_downloadPrefix + "_%(title)s.%(ext)s",
-        url
-    };
+    // ffmpeg is optional. The YouTube audio is already in the Opus codec, so no
+    // re-encoding is ever needed — but turning it into a clean ".opus" file means
+    // remuxing the WebM container, which only ffmpeg can do.
+    //   - ffmpeg present: extract + remux into a tidy .opus (lossless copy).
+    //   - ffmpeg absent : download the native audio stream as-is (Opus in .webm
+    //                      when offered, otherwise bestaudio). It plays fine via
+    //                      Qt's ffmpeg multimedia backend.
+    const QString outTemplate = outDir + "/" + m_downloadPrefix + "_%(title)s.%(ext)s";
+    const QString ffmpeg = findFfmpeg();
+
+    QStringList args;
+    if (!ffmpeg.isEmpty()) {
+        args = {
+            "-x",
+            "--audio-format", "opus",
+            "--audio-quality", "0",
+            "--ffmpeg-location", ffmpeg,
+            "--no-playlist",
+            "-o", outTemplate,
+            url
+        };
+    } else {
+        args = {
+            "-f", "bestaudio[acodec=opus]/bestaudio",
+            "--no-playlist",
+            "-o", outTemplate,
+            url
+        };
+    }
     m_downloadProcess->start(ytDlp, args);
 }
 

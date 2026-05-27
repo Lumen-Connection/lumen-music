@@ -14,7 +14,7 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("Lumen Player");
+    setWindowTitle("Lumen Music");
     resize(1100, 720);
     setMinimumSize(900, 550);
 
@@ -207,7 +207,7 @@ void MainWindow::buildSidebar(QWidget *sidebar) {
     logoText->setStyleSheet(QString("color: %1; background: transparent;").arg(Theme::text().name()));
     logoLayout->addWidget(logoText);
 
-    auto *badge = new QLabel("PLAYER");
+    auto *badge = new QLabel("MUSIC");
     badge->setFont(Theme::bodyFont(9));
     QColor ac = Theme::accent();
     badge->setStyleSheet(QString("color: %1; background: rgba(%2,%3,%4,0.16); border-radius: 4px; padding: 2px 6px; font-weight: bold; letter-spacing: 1px;")

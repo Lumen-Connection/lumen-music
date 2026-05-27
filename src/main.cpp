@@ -12,10 +12,10 @@ int main(int argc, char *argv[])
     do {
         QApplication app(argc, argv);
         // Storage identifiers kept for compatibility with existing data;
-        // the visible name is Lumen Player.
+        // the visible name is Lumen Music.
         app.setApplicationName("Vinil Player");
         app.setOrganizationName("VinilPlayer");
-        app.setApplicationDisplayName("Lumen Player");
+        app.setApplicationDisplayName("Lumen Music");
         app.setWindowIcon(lumenLogoIcon());
 
         QSettings settings;

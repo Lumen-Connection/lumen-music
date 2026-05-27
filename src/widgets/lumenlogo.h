@@ -7,7 +7,7 @@
 #include <QPixmap>
 #include <QIcon>
 
-// Draws the Lumen Player mark — a broken diamond outline (four corner chevrons)
+// Draws the Lumen Music mark — a broken diamond outline (four corner chevrons)
 // in the brand orange-red, with a solid coral diamond at its centre — into the
 // given w×h area.
 inline void paintLumenMark(QPainter &p, qreal w, qreal h) {

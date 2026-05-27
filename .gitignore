@@ -20,10 +20,17 @@ Makefile.Release
 *.exp
 *.lib
 
-# qmake generated
+# qmake generated (build legado)
 .qmake.stash
 *.user.stash
 *_resource.rc
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeUserPresets.json
+compile_commands.json
 
 # Qt Creator (configuracoes especificas da sua maquina)
 .qtcreator/
