@@ -90,20 +90,36 @@ cmake --build "$env:LOCALAPPDATA\LumenMusic-build\release"
 
 ## Gerando um pacote distribuível
 
-Para rodar em um PC sem o Qt instalado, empacote com o `windeployqt`:
+O empacotamento é automático: o `install` do CMake chama o `windeployqt`, então
+um `cmake --install` ou um `cpack` já produzem uma pasta/zip que roda num PC
+**sem o Qt instalado**.
+
+### Pasta autossuficiente (`cmake --install`)
 
 ```powershell
 $build = "$env:LOCALAPPDATA\LumenMusic-build\release"
-$dist = "dist\LumenMusic"
-New-Item -ItemType Directory -Force $dist | Out-Null
-Copy-Item "$build\LumenMusic.exe" "$dist\LumenMusic.exe"
-Copy-Item "$build\yt-dlp.exe" "$dist\yt-dlp.exe"
-windeployqt --release --compiler-runtime --no-translations "$dist\LumenMusic.exe"
-Compress-Archive -Path "$dist\*" -DestinationPath "dist\LumenMusic-win64.zip" -Force
+cmake --install $build --prefix dist\LumenMusic
 ```
 
-Teste rodando `dist\LumenMusic.exe` e reproduzindo uma música (valida os plugins de
-multimídia e o driver SQLite).
+Gera `dist\LumenMusic\` com `LumenMusic.exe`, `yt-dlp.exe`, as DLLs do Qt e os
+plugins. Teste rodando `dist\LumenMusic\LumenMusic.exe` e reproduzindo uma música
+(valida os plugins de multimídia e o driver SQLite).
+
+### ZIP de release (`cpack`)
+
+```powershell
+$build = "$env:LOCALAPPDATA\LumenMusic-build\release"
+cpack --config "$build\CPackConfig.cmake" -G ZIP -B dist
+```
+
+Gera `dist\LumenMusic-v<versão>-win64.zip`. A versão vem de uma única fonte — o
+`project(... VERSION ...)` no `CMakeLists.txt` —, que também é embutida no
+`.exe` (VERSIONINFO) e lida automaticamente pelo instalador Inno Setup.
+
+### Instalador (Inno Setup, opcional)
+
+Com a pasta `dist\LumenMusic` pronta, compile `installer\lumen-music.iss` com o
+`ISCC.exe`. A versão é lida direto do `.exe`, então não há número para manter à mão.
 
 ## Licença
 

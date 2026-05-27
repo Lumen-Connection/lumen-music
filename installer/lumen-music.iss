@@ -4,9 +4,12 @@
 ; Gera:         dist\LumenMusic-v1.0.0-setup.exe
 
 #define MyAppName "Lumen Music"
-#define MyAppVersion "1.0.0"
 #define MyAppPublisher "Lumen Connection"
 #define MyAppExeName "LumenMusic.exe"
+#define MyAppSource "..\dist\LumenMusic"
+; Single source of truth: read the version straight from the built exe's
+; VERSIONINFO (embedded by CMake from PROJECT_VERSION).
+#define MyAppVersion GetVersionNumbersString(MyAppSource + "\" + MyAppExeName)
 
 [Setup]
 AppName={#MyAppName}
@@ -30,7 +33,7 @@ Name: "desktopicon"; Description: "Criar um atalho na Área de Trabalho"; GroupD
 
 [Files]
 ; Copia toda a pasta empacotada (exe + DLLs do Qt + plugins).
-Source: "..\dist\LumenMusic\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "{#MyAppSource}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\Lumen Music"; Filename: "{app}\{#MyAppExeName}"

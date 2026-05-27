@@ -87,7 +87,17 @@ if(WIN32)
     # windres' internal preprocessor mangles such -I paths. With no include
     # dirs, windres resolves the relative "lumen.ico" against the .rc's own
     # directory, which works. (This is why the old .pro used a relative RC_FILE.)
-    add_library(lumen_winres OBJECT resources/app.rc)
+    # Generate the version resource from the single source of truth (PROJECT_VERSION).
+    # VERSIONINFO references no external files, so the spaced/non-ASCII path is a
+    # non-issue here; it lands in the (ASCII) build dir.
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/version.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/version.rc"
+        @ONLY)
+
+    add_library(lumen_winres OBJECT
+        resources/app.rc
+        "${CMAKE_CURRENT_BINARY_DIR}/version.rc")
     # No moc/uic/rcc here: those inject an autogen include dir (a spaced path)
     # that windres' preprocessor cannot parse.
     set_target_properties(lumen_winres PROPERTIES
@@ -111,10 +121,43 @@ if(EXISTS "${YTDLP_SRC}")
         COMMENT "Copying yt-dlp.exe next to LumenMusic")
 endif()
 
-# --- Install ----------------------------------------------------------------
-include(GNUInstallDirs)
-install(TARGETS LumenMusic
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+# --- Install + self-contained deployment ------------------------------------
+# Flat layout for a portable Windows app: LumenMusic.exe + Qt DLLs at the top,
+# plugins in subfolders. yt-dlp sits next to the exe (where the app looks).
+install(TARGETS LumenMusic RUNTIME DESTINATION ".")
 if(EXISTS "${YTDLP_SRC}")
-    install(FILES "${YTDLP_SRC}" DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES "${YTDLP_SRC}" DESTINATION ".")
 endif()
+
+# Run windeployqt at install time so `cmake --install` / `cpack` produce a tree
+# that runs on a machine without Qt. Deploys flat next to the exe (the layout
+# the Inno Setup installer expects) instead of Qt's structured bin/ layout.
+if(WIN32)
+    get_filename_component(_qt_root "${Qt6_DIR}/../../.." ABSOLUTE)
+    find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${_qt_root}/bin")
+    if(NOT WINDEPLOYQT_EXECUTABLE)
+        message(FATAL_ERROR "windeployqt not found near ${_qt_root}/bin")
+    endif()
+    install(CODE "
+        message(STATUS \"Deploying Qt runtime with windeployqt...\")
+        execute_process(COMMAND \"${WINDEPLOYQT_EXECUTABLE}\"
+            --release --compiler-runtime --no-translations --no-system-d3d-compiler
+            \"\${CMAKE_INSTALL_PREFIX}/LumenMusic.exe\"
+            RESULT_VARIABLE _rc)
+        if(NOT _rc EQUAL 0)
+            message(FATAL_ERROR \"windeployqt failed (\${_rc})\")
+        endif()
+    ")
+endif()
+
+# --- Packaging (CPack) ------------------------------------------------------
+# `cpack -G ZIP` builds the deployed install tree and zips it into a release
+# artifact named after the single-source version.
+set(CPACK_PACKAGE_NAME "LumenMusic")
+set(CPACK_PACKAGE_VENDOR "Lumen Connection")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME "LumenMusic-v${PROJECT_VERSION}-win64")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Lumen Music")
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_STRIP_FILES ON)
+include(CPack)
